@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CHECKLIST DIÁRIO 5S - PRODUÇÃO</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0d6efd">
+    <style>
+        body { background-color: #f4f7f6; text-transform: uppercase; font-family: sans-serif; }
+      .card { border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+      .btn-enviar { background-color: #0d6efd; color: white; font-weight: bold; }
+      .item-row { padding: 10px 0; border-bottom: 1px solid #eee; font-weight: bold; }
+      .btn-check:checked +.btn-outline-success { background-color: #198754; color: white; }
+      .btn-check:checked +.btn-outline-danger { background-color: #dc3545; color: white; }
+      .table-actions { white-space: nowrap; }
+      .foto-preview { max-width: 80px; max-height: 80px; object-fit: cover; border-radius: 8px; cursor: pointer; }
+      .camera-btn { display: none; }
+      .nc-selected.camera-btn { display: inline-block; }
+        #dashboard { display: none; }
+        @media print {.no-print { display: none!important; } }
+    </style>
+</head>
+<body>
+
+<div class="container py-4">
+    <div id="loginCard" class="card mx-auto p-4" style="max-width: 400px;">
+        <h3 class="text-center mb-4">LOGIN 5S</h3>
+        <input type="email" id="email" class="form-control mb-2" placeholder="EMAIL">
+        <input type="password" id="senha" class="form-control mb-3" placeholder="SENHA">
+        <button id="btnLogin" class="btn btn-primary w-100">ENTRAR</button>
+        <div id="loginStatus" class="mt-2 text-center text-danger small"></div>
+    </div>
+
+    <div id="appContent" style="display:none;">
+        <div class="d-flex justify-content-between align-items-center mb-3 no-print">
+            <div>
+                <span id="userEmail" class="fw-bold"></span>
+                <span id="userBadge" class="badge bg-secondary ms-2"></span>
+            </div>
+            <div>
+                <button id="btnDashboard" class="btn btn-sm btn-info"><i class="bi bi-graph-up"></i> DASHBOARD</button>
+                <button id="btnLogout" class="btn btn-sm btn-outline-danger"><i class="bi bi-box-arrow-right"></i></button>
+            </div>
+        </div>
+
+        <div id="formCard" class="card mx-auto p-4 no-print" style="max-width: 700px;">
+            <h2 class="text-center mb-4">CHECKLIST DIÁRIO 5S</h2>
+            <form id="checkForm">
+                <input type="hidden" id="editId">
+                <div class="mb-4">
+                    <label class="form-label fw-bold">NOME DO OPERADOR:</label>
+                    <select class="form-select" id="operador" required>
+                        <option value="" selected disabled>SELECIONE O OPERADOR</option>
+                        <option value="ALAN CARLOS">ALAN CARLOS</option>
+                        <option value="ELISON MARQUES">ELISON MARQUES</option>
+                        <option value="ARNOLD WILLIAM">ARNOLD WILLIAM</option>
+                    </select>
+                </div>
+                <div id="listaItens"></div>
+                <div class="mt-4">
+                    <label class="form-label fw-bold">OBSERVAÇÕES / INCIDENTES:</label>
+                    <textarea class="form-control" id="observacoes" rows="2"></textarea>
+                </div>
+                <button type="button" id="btnSalvar" class="btn btn-enviar w-100 mt-4 py-2">
+                    <span class="spinner-border spinner-border-sm d-none" id="spinner"></span>
+                    SUBMETER CHECKLIST
+                </button>
+                <button type="button" id="btnCancelar" class="btn btn-secondary w-100 mt-2 py-2 d-none">CANCELAR EDIÇÃO</button>
+            </form>
+            <div id="status" class="mt-3 text-center fw-bold"></div>
+        </div>
+
+        <div id="dashboard" class="card mt-4 p-4 mx-auto" style="max-width: 900px;">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h3 class="mb-0">DASHBOARD 5S</h3>
+                <button id="btnFecharDash" class="btn btn-sm btn-secondary no-print">VOLTAR</button>
+            </div>
+            <div class="row">
+                <div class="col-md-8"><canvas id="chartConformidade"></canvas></div>
+                <div class="col-md-4"><canvas id="chartRankingNC"></canvas></div>
+            </div>
+            <div class="mt-3 no-print">
+                <label class="fw-bold">RELATÓRIO MENSAL:</label>
+                <div class="input-group">
+                    <input type="month" id="mesRelatorio" class="form-control">
+                    <button id="btnRelatorioMensal" class="btn btn-danger"><i class="bi bi-file-pdf"></i> GERAR PDF</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mt-5 p-4 mx-auto" style="max-width: 900px;">
+            <div class="d-flex justify-content-between align-items-center mb-3 no-print">
+                <h3 class="mb-0">HISTÓRICO RECENTE</h3>
+                <div>
+                    <button id="btnGerarPDF" class="btn btn-sm btn-danger"><i class="bi bi-file-pdf"></i> PDF</button>
+                    <button id="btnExportar" class="btn btn-sm btn-success"><i class="bi bi-file-earmark-excel"></i> CSV</button>
+                </div>
+            </div>
+            <div class="table-responsive mt-3">
+                <table class="table table-bordered table-sm text-uppercase small" id="tabelaHistorico">
+                    <thead class="table-dark">
+                        <tr><th>DATA/HORA</th><th>OPERADOR</th><th>NC / %</th><th>FOTOS</th><th>OBSERVAÇÕES</th><th class="no-print">AÇÕES</th></tr>
+                    </thead>
+                    <tbody id="tabelaBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getFirestore, collection, addDoc, getDocs, query, orderBy, limit, doc, updateDoc, deleteDoc, getDoc, serverTimestamp, enableIndexedDbPersistence, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+    import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
+    import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-analytics.js";
+
+    // SEU PROJETO NOVO
+    const firebaseConfig = {
+      apiKey: "AIzaSyDb47BHK5lirWGUkVFVGpRNwSxIle5JMBg",
+      authDomain: "checkliste2-9a3fa.firebaseapp.com",
+      databaseURL: "https://checkliste2-9a3fa-default-rtdb.firebaseio.com",
+      projectId: "checkliste2-9a3fa",
+      storageBucket: "checkliste2-9a3fa.appspot.com",
+      messagingSenderId: "400829417846",
+      appId: "1:400829417846:web:90d4a89b677228a7aed257",
+      measurementId: "G-N2YJNB5NHY"
+    };
+
+    // COLOQUE AQUI OS EMAILS DOS SUPERVISORES
+    const SUPERVISORES = ['supervisor@empresa.com', 'gestor@empresa.com'];
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const auth = getAuth(app);
+    const storage = getStorage(app);
+    const analytics = getAnalytics(app);
+
+    enableIndexedDbPersistence(db).catch(e => console.log('Offline falhou:', e));
+
+    let historicoCache = [];
+    let editando = false;
+    let isSupervisor = false;
+    let chartConf, chartRank;
+
+    const ITENS = [
+        {id: 'chaoAgua', label: 'CHÃO LIVRE DE ÁGUA?'},
+        {id: 'chaoOleo', label: 'CHÃO LIVRE DE ÓLEO?'},
+        {id: 'esteira', label: 'ESTEIRA DESLIGADA?'},
+        {id: 'injetoras', label: 'INJETORAS DESLIGADAS?'},
+        {id: 'goteiras', label: 'SEM GOTEIRAS?'},
+        {id: 'molde', label: 'MOLDE NO PORTA-PALETE?'},
+        {id: 'maquinas', label: 'MÁQUINAS FECHADAS?'},
+        {id: 'materiaPrima', label: 'MATÉRIA-PRIMA NO LUGAR?'},
+        {id: 'materialArea', label: 'MATERIAL NA ÁREA DEMARCADA?'},
+        {id: 'talha', label: 'CONTROLE DA TALHA GUARDADO?'},
+        {id: 'torre', label: 'TORRE DE REFRIGERAÇÃO DESLIGADA?'}
+    ];
+
+    onAuthStateChanged(auth, user => {
+        if(user){
+            isSupervisor = SUPERVISORES.includes(user.email);
+            document.getElementById('loginCard').style.display = 'none';
+            document.getElementById('appContent').style.display = 'block';
+            document.getElementById('userEmail').innerText = user.email;
+            document.getElementById('userBadge').innerText = isSupervisor? 'SUPERVISOR' : 'OPERADOR';
+            document.getElementById('userBadge').className = `badge ${isSupervisor? 'bg-success' : 'bg-secondary'} ms-2`;
+            montarItens();
+            carregarHistorico();
+        } else {
+            document.getElementById('loginCard').style.display = 'block';
+            document.getElementById('appContent').style.display = 'none';
+        }
+    });
+
+    document.getElementById('btnLogin').onclick = async () => {
+        const email = document.getElementById('email').value;
+        const senha = document.getElementById('senha').value;
+        try {
+            await signInWithEmailAndPassword(auth, email, senha);
+        } catch(e) {
+            document.getElementById('loginStatus').innerText = 'EMAIL OU SENHA INVÁLIDOS';
+        }
+    };
+
+    document.getElementById('btnLogout').onclick = () => signOut(auth);
+
+    function montarItens(){
+        const lista = document.getElementById('listaItens');
+        lista.innerHTML = ITENS.map(item => `
+            <div class="item-row" data-item="${item.id}">
+                <div class="d-flex justify-content-between align-items-center">
+                    <span>${item.label}</span>
+                    <div class="d-flex align-items-center gap-2">
+                        <input type="file" id="foto_${item.id}" accept="image/*" capture="environment" style="display:none">
+                        <img id="preview_${item.id}" class="foto-preview d-none">
+                        <button type="button" class="btn btn-sm btn-warning camera-btn" onclick="document.getElementById('foto_${item.id}').click()">
+                            <i class="bi bi-camera"></i>
+                        </button>
+                        <div class="btn-group btn-group-sm" role="group">
+                            <input type="radio" class="btn-check" name="${item.id}" id="${item.id}C" value="CONFORME">
+                            <label class="btn btn-outline-success" for="${item.id}C">C</label>
+                            <input type="radio" class="btn-check" name="${item.id}" id="${item.id}NC" value="NÃO CONFORME" checked>
+                            <label class="btn btn-outline-danger" for="${item.id}NC">NC</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+
+        ITENS.forEach(item => {
+            document.querySelectorAll(`input[name="${item.id}"]`).forEach(radio => {
+                radio.onchange = () => {
+                    const row = document.querySelector(`[data-item="${item.id}"]`);
+                    if(radio.value === 'NÃO CONFORME') row.classList.add('nc-selected');
+                    else row.classList.remove('nc-selected');
+                };
+            });
+            document.getElementById(`foto_${item.id}`).onchange = e => {
+                const file = e.target.files[0];
+                if(file) {
+                    const preview = document.getElementById(`preview_${item.id}`);
+                    preview.src = URL.createObjectURL(file);
+                    preview.classList.remove('d-none');
+                }
+            };
+        });
+        resetarParaNC();
+    }
+
+    function resetarParaNC(){
+        ITENS.forEach(item => {
+            document.querySelector(`input[name="${item.id}"][value="NÃO CONFORME"]`).checked = true;
+            document.querySelector(`[data-item="${item.id}"]`).classList.add('nc-selected');
+        });
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    document.getElementById("btnSalvar").onclick = async () => {
+        const btn = document.getElementById("btnSalvar");
+        const spinner = document.getElementById("spinner");
+        const form = document.getElementById("checkForm");
+        const status = document.getElementById("status");
+        const editId = document.getElementById("editId").value;
+
+        if(!document.getElementById('operador').value){
+            status.innerHTML = '<span class="text-danger">SELECIONE O OPERADOR</span>';
+            return;
+        }
+
+        btn.disabled = true;
+        spinner.classList.remove('d-none');
+
+        let data = {
+            dataHora: serverTimestamp(),
+            operador: document.getElementById('operador').value,
+            userId: auth.currentUser.uid,
+            userEmail: auth.currentUser.email,
+            totalNC: 0,
+            fotos: {}
+        };
+
+        for(const item of ITENS){
+            const status = document.querySelector(`input[name="${item.id}"]:checked`).value;
+            data[item.id] = status;
+            if(status === "NÃO CONFORME") data.totalNC++;
+
+            const fileInput = document.getElementById(`foto_${item.id}`);
+            if(fileInput.files[0]){
+                const file = fileInput.files[0];
+                const fileRef = ref(storage, `5s/${Date.now()}_${item.id}.jpg`);
+                await uploadBytes(fileRef, file);
+                data.fotos[item.id] = await getDownloadURL(fileRef);
+            }
+        }
+
+        if(data.totalNC === 11 &&!editando){
+            if(!confirm('TODOS OS ITENS ESTÃO NC. CONFIRMA O ENVIO?')) {
+                btn.disabled = false;
+                spinner.classList.add('d-none');
+                return;
+            }
+        }
+
+        data['observacoes'] = document.getElementById('observacoes').value.toUpperCase();
+
+        try {
+            status.innerText = editando? "ATUALIZANDO..." : "ENVIANDO...";
+
+            if(editando && editId){
+                await updateDoc(doc(db, "logs_5s", editId), data);
+                status.innerHTML = '<span class="text-success">ATUALIZADO!</span>';
+                cancelarEdicao();
+            } else {
+                await addDoc(collection(db, "logs_5s"), data);
+                status.innerHTML = '<span class="text-success">REGISTRADO!</span>';
+                form.reset();
+                document.getElementById("operador").value = "";
+                resetarParaNC();
+                ITENS.forEach(item => {
+                    document.getElementById(`preview_${item.id}`).classList.add('d-none');
+                    document.getElementById(`foto_${item.id}`).value = '';
+                });
+            }
+            carregarHistorico();
+        } catch (e) {
+            status.innerHTML = '<span class="text-danger">ERRO AO ENVIAR.</span>';
+            console.error(e);
+        } finally {
+            btn.disabled = false;
+            spinner.classList.add('d-none');
+            setTimeout(() => status.innerText = "", 3000);
+        }
+    };
+
+    document.getElementById("btnCancelar").onclick = cancelarEdicao;
+
+    function cancelarEdicao() {
+        editando = false;
+        document.getElementById("editId").value = "";
+        document.getElementById("btnSalvar").innerHTML = '<span class="spinner-border spinner-border-sm d-none" id="spinner"></span>SUBMETER CHECKLIST';
+        document.getElementById("btnCancelar").classList.add("d-none");
+        document.getElementById("checkForm").reset();
+        document.getElementById("operador").value = "";
+        resetarParaNC();
+    }
+
+    async function carregarHistorico() {
+        try {
+            document.getElementById("tabelaBody").innerHTML = `<tr><td colspan="6" class="text-center">CARREGANDO...</td></tr>`;
+            const q = query(collection(db, "logs_5s"), orderBy("dataHora", "desc"), limit(20));
+            const querySnapshot = await getDocs(q);
+            const tabela = document.getElementById("tabelaBody");
+            tabela.innerHTML = "";
+            historicoCache = [];
+
+            querySnapshot.forEach((docSnap) => {
+                const d = docSnap.data();
+                const id = docSnap.id;
+                const dataBR = d.dataHora?.toDate().toLocaleString('pt-BR', { timeZone: 'America/Manaus' }) || '-';
+                historicoCache.push({...d, id, dataBR});
+                const porcentagem = Math.round((11-d.totalNC)/11*100);
+                const fotosHtml = Object.values(d.fotos || {}).map(url =>
+                    `<img src="${url}" class="foto-preview" onclick="window.open('${url}')">`
+                ).join(' ');
+
+                tabela.innerHTML += `
+                    <tr>
+                        <td>${dataBR}</td>
+                        <td>${d.operador}</td>
+                        <td class="${d.totalNC > 0? 'table-danger fw-bold' : 'table-success'}">${d.totalNC || 0} NC - ${porcentagem}%</td>
+                        <td>${fotosHtml || '-'}</td>
+                        <td>${escapeHtml(d.observacoes || '-')}</td>
+                        <td class="table-actions no-print">
+                            ${isSupervisor? `
+                            <button class="btn btn-sm btn-primary" onclick="editarRegistro('${id}')"><i class="bi bi-pencil"></i></button>
+                            <button class="btn btn-sm btn-danger" onclick="excluirRegistro('${id}')"><i class="bi bi-trash"></i></button>
+                            ` : ''}
+                            <button class="btn btn-sm btn-info" onclick="imprimirRegistro('${id}')"><i class="bi bi-printer"></i></button>
+                        </td>
+                    </tr>`;
+            });
+            if(historicoCache.length === 0){
+                tabela.innerHTML = `<tr><td colspan="6" class="text-center">NENHUM REGISTRO</td></tr>`;
+            }
+        } catch (e) {
+            console.error("Erro ao carregar histórico:", e);
+        }
+    }
+
+    window.editarRegistro = async (id) => {
+        if(!isSupervisor) return alert('APENAS SUPERVISOR PODE EDITAR');
+        const docRef = doc(db, "logs_5s", id);
+        const docSnap = await getDoc(docRef);
+        if(docSnap.exists()){
+            const d = docSnap.data();
+            editando = true;
+            document.getElementById("editId").value = id;
+            document.getElementById("operador").value = d.operador;
+            document.getElementById("observacoes").value = d.observacoes || "";
+
+            ITENS.forEach(item => {
+                document.querySelector(`input[name="${item.id}"][value="${d[item.id]}"]`).checked = true;
+                const row = document.querySelector(`[data-item="${item.id}"]`);
+                if(d[item.id] === 'NÃO CONFORME') row.classList.add('nc-selected');
+                else row.classList.remove('nc-selected');
+                if(d.fotos?.[item.id]){
+                    document.getElementById(`preview_${item.id}`).src = d.fotos[item.id];
+                    document.getElementById(`preview_${item.id}`).classList.remove('d-none');
+                }
+            });
+
+            document.getElementById("btnSalvar").innerHTML = '<span class="spinner-border spinner-border-sm d-none" id="spinner"></span>ATUALIZAR CHECKLIST';
+            document.getElementById("btnCancelar").classList.remove("d-none");
+            window.scrollTo(0,0);
+        }
+    };
+
+    window.excluirRegistro = async (id) => {
+        if(!isSupervisor) return alert('APENAS SUPERVISOR PODE EXCLUIR');
+        if(confirm("CONFIRMA EXCLUSÃO DESTE REGISTRO?")){
+            try {
+                await deleteDoc(doc(db, "logs_5s", id));
+                carregarHistorico();
+            } catch (e) {
+                alert("ERRO AO EXCLUIR");
+            }
+        }
+    };
+
+    window.imprimirRegistro = (id) => {
+        const r = historicoCache.find(r => r.id === id);
+        if(!r) return;
+        const win = window.open('', '', 'height=700,width=900');
+        win.document.write('<html><head><title>CHECKLIST 5S</title>');
+        win.document.write('<style>body{font-family:Arial;text-transform:uppercase} table{width:100%;border-collapse:collapse} td,th{border:1px solid #000;padding:8px} img{max-width:200px}</style>');
+        win.document.write('</head><body>');
+        win.document.write(`<h2>CHECKLIST DIÁRIO 5S</h2>`);
+        win.document.write(`<p><b>DATA/HORA:</b> ${r.dataBR}</p>`);
+        win.document.write(`<p><b>OPERADOR:</b> ${r.operador}</p>`);
+        win.document.write(`<p><b>TOTAL NC:</b> ${r.totalNC} - ${Math.round((11-r.totalNC)/11*100)}% CONFORME</p>`);
+        win.document.write('<table><tr><th>ITEM</th><th>STATUS</th><th>FOTO</th></tr>');
+        ITENS.forEach(item => {
+            const foto = r.fotos?.[item.id]? `<img src="${r.fotos[item.id]}">` : '-';
+            win.document.write(`<tr><td>${item.label}</td><td>${r[item.id]}</td><td>${foto}</td></tr>`);
+        });
+        win.document.write('</table>');
+        win.document.write(`<p><b>OBSERVAÇÕES:</b> ${escapeHtml(r.observacoes || '-')}</p>`);
+        win.document.write('</body></html>');
+        win.document.close();
+        win.print();
+    };
+
+    document.getElementById('btnDashboard').onclick = async () => {
+        document.getElementById('formCard').style.display = 'none';
+        document.getElementById('dashboard').style.display = 'block';
+        await gerarDashboard();
+    };
+    document.getElementById('btnFecharDash').onclick = () => {
+        document.getElementById('formCard').style.display = 'block';
+        document.getElementById('dashboard').style.display = 'none';
+    };
+
+    async function gerarDashboard(){
+        const trintaDiasAtras = new Date();
+        trintaDiasAtras.setDate(trintaDiasAtras.getDate() - 30);
+        const q = query(collection(db, "logs_5s"), where("dataHora", ">=", trintaDiasAtras), orderBy("dataHora"));
+        const snap = await getDocs(q);
+
+        const dadosPorDia = {};
+        const contadorNC = {};
+        ITENS.forEach(i => contadorNC[i.id] = 0);
+
+        snap.forEach(doc => {
+            const d = doc.data();
+            const dia = d.dataHora.toDate().toLocaleDateString('pt-BR');
+            if(!dadosPorDia[dia]) dadosPorDia[dia] = {total: 0, soma: 0};
+            dadosPorDia[dia].total++;
+            dadosPorDia[dia].soma += (11 - d.totalNC);
+            ITENS.forEach(i => { if(d[i.id] === 'NÃO CONFORME') contadorNC[i.id]++; });
+        });
+
+        const labels = Object.keys(dadosPorDia);
+        const percentuais = labels.map(dia => Math.round(dadosPorDia[dia].soma / (dadosPorDia[dia].total * 11) * 100));
+
+        if(chartConf) chartConf.destroy();
+        chartConf = new Chart(document.getElementById('chartConformidade'), {
+            type: 'line',
+            data: { labels, datasets: [{ label: '% CONFORMIDADE', data: percentuais, borderColor: '#0d6efd', tension: 0.3 }] },
+            options: { responsive: true, scales: { y: { min: 0, max: 100 } } }
+        });
+
+        const rankingLabels = ITENS.map(i => i.label);
+        const rankingData = ITENS.map(i => contadorNC[i.id]);
+        if(chartRank) chartRank.destroy();
+        chartRank = new Chart(document.getElementById('chartRankingNC'), {
+            type: 'bar',
+            data: { labels: rankingLabels, datasets: [{ label: 'TOTAL NC', data: rankingData, backgroundColor: '#dc3545' }] },
+            options: { responsive: true, indexAxis: 'y' }
+        });
+    }
+
+    document.getElementById('btnRelatorioMensal').onclick = async () => {
+        const mes = document.getElementById('mesRelatorio').value;
+        if(!mes) return alert('SELECIONE O MÊS');
+        const [ano, mesNum] = mes.split('-');
+        const inicio = new Date(ano, mesNum - 1, 1);
+        const fim = new Date(ano, mesNum, 0, 23, 59, 59);
+
+        const q = query(collection(db, "logs_5s"), where("dataHora", ">=", inicio), where("dataHora", "<=", fim), orderBy("dataHora"));
+        const snap = await getDocs(q);
+        if(snap.empty) return alert('SEM DADOS NO PERÍODO');
+
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        doc.setFontSize(16);
+        doc.text(`RELATÓRIO MENSAL 5S - ${mesNum}/${ano}`, 105, 15, { align: 'center' });
+
+        const dados = [];
+        snap.forEach(s => dados.push(s.data()));
+
+        const totalReg = dados.length;
+        const mediaConf = Math.round(dados.reduce((sum, d) => sum + (11-d.totalNC), 0) / (totalReg * 11) * 100);
+        doc.setFontSize(12);
+        doc.text(`TOTAL DE CHECKLISTS: ${totalReg}`, 14, 30);
+        doc.text(`MÉDIA DE CONFORMIDADE: ${mediaConf}%`, 14, 37);
+
+        const tableData = dados.map(d => [
+            d.dataHora.toDate().toLocaleDateString('pt-BR'),
+            d.operador,
+            `${d.totalNC} - ${Math.round((11-d.totalNC)/11*100)}%`
+        ]);
+
+        doc.autoTable({
+            head: [['DATA', 'OPERADOR', 'NC / %']],
+            body: tableData,
+            startY: 45,
+            styles: { fontSize: 8 }
+        });
+
+        doc.save(`relatorio_5s_${mes}.pdf`);
+    };
+
+    document.getElementById("btnGerarPDF").onclick = () => {
+        if(historicoCache.length === 0) return alert("SEM DADOS PARA GERAR PDF");
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        doc.setFontSize(16);
+        doc.text("RELATÓRIO CHECKLIST 5S", 105, 15, { align: 'center' });
+        const tableData = historicoCache.map(d => [d.dataBR, d.operador, `${d.totalNC} - ${Math.round((11-d.totalNC)/11*100)}%`, d.observacoes || '-']);
+        doc.autoTable({ head: [['DATA/HORA', 'OPERADOR', 'NC / %', 'OBSERVAÇÕES']], body: tableData, startY: 25, styles: { fontSize: 8 } });
+        doc.save(`checklist_5s_${new Date().toISOString().slice(0,10)}.pdf`);
+    };
+
+    document.getElementById("btnExportar").onclick = () => {
+        if(historicoCache.length === 0) return;
+        let csv = 'DATA/HORA,OPERADOR,TOTAL NC,PERCENTUAL,OBSERVACOES,' + ITENS.map(i => i.label).join(',') + '\n';
+        historicoCache.forEach(d => {
+            const porcentagem = Math.round((11-d.totalNC)/11*100);
+            const itens = ITENS.map(i => d[i.id]).join(',');
+            csv += `"${d.dataBR}","${d.operador}",${d.totalNC},${porcentagem}%,"${d.observacoes || ''}",${itens}\n`;
+        });
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `checklist_5s_${new Date().toISOString().slice(0,10)}.csv`;
+        link.click();
+    };
+
+    if('serviceWorker' in navigator){
+        const swCode = `
+            const CACHE = 'checklist-5s-v2';
+            self.addEventListener('install', e => e.waitUntil(caches.open(CACHE)));
+            self.addEventListener('fetch', e => e.respondWith(caches.match(e.request).then(r => r || fetch(e.request))));
+        `;
+        const blob = new Blob([swCode], {type: 'application/javascript'});
+        navigator.serviceWorker.register(URL.createObjectURL(blob));
+    }
+</script>
+
+</body>
+</html>
