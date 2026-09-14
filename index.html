@@ -92,5 +92,157 @@ Nota: Fotos salvas em base64 no localStorage`,ue=new Blob([le],{type:"text/csv;c
 </script>
   <script>(function(){function m(a){var h=a.getAttribute("href");if(!h)return;try{var u=new URL(h,document.baseURI);if((u.protocol==="http:"||u.protocol==="https:")&&u.host!==location.host){a.target="_blank";a.rel="noopener noreferrer";}}catch(e){}}function s(){document.querySelectorAll("a[href]").forEach(m);}if(document.readyState!=="loading"){s();}else{document.addEventListener("DOMContentLoaded",s);}document.addEventListener("click",function(e){var a=e.target&&e.target.closest&&e.target.closest("a[href]");if(a){m(a);}},true);})();</script>
   
+
+<script type="module">
+  // Firebase SDK - v10 modular
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getFirestore, doc, setDoc, getDoc, getDocs, collection, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-analytics.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyA8RDdgzh7MUEvS-PqLgXjvn4oBWx8i9GI",
+    authDomain: "checklist-5s-d2cc5.firebaseapp.com",
+    databaseURL: "https://checklist-5s-d2cc5-default-rtdb.firebaseio.com",
+    projectId: "checklist-5s-d2cc5",
+    storageBucket: "checklist-5s-d2cc5.firebasestorage.app",
+    messagingSenderId: "1020035609550",
+    appId: "1:1020035609550:web:007287195174668530319f",
+    measurementId: "G-WT5044QB3G"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  let analytics;
+  try { analytics = getAnalytics(app); } catch(e){ console.log("Analytics não disponível em localhost"); }
+
+  console.log("[Firebase] Conectado ao projeto checklist-5s-d2cc5", app);
+
+  // Helper: salva no Firestore
+  async function saveToFirestore(key, value) {
+    try {
+      // Usa coleção por tipo
+      let collectionName = "checklist_geral";
+      let docId = key;
+
+      if (key.startsWith("checklist-ponte") || key.startsWith("checklist-ocorrencias-ponte") || key.startsWith("checklist-app-version")) {
+        collectionName = "ponte_rolante";
+      } else if (key.startsWith("finalizacoes-")) {
+        collectionName = "finalizacoes_injetoras";
+      } else if (key.startsWith("checklist-") && key.includes("INJ")) {
+        collectionName = "injetoras";
+      }
+
+      const ref = doc(db, collectionName, docId);
+      await setDoc(ref, {
+        data: value,
+        updatedAt: serverTimestamp(),
+        key: key
+      }, { merge: true });
+      console.log(`[Firestore] Salvo ${collectionName}/${docId}`);
+    } catch (err) {
+      console.error("[Firestore] Erro ao salvar", key, err);
+    }
+  }
+
+  async function loadFromFirestore() {
+    const collections = ["ponte_rolante", "finalizacoes_injetoras", "injetoras", "checklist_geral"];
+    let loadedCount = 0;
+    for (const col of collections) {
+      try {
+        const snap = await getDocs(collection(db, col));
+        snap.forEach((docSnap) => {
+          const d = docSnap.data();
+          if (d && d.key && d.data) {
+            // Não sobrescreve se já tiver dado mais recente no localStorage? Mas na primeira carga, popula
+            if (!localStorage.getItem(d.key)) {
+              localStorage.setItem(d.key, d.data);
+              loadedCount++;
+            } else {
+              // Se Firestore for mais novo, atualiza (simplificado: sempre pega do Firestore na carga inicial se versão diferente)
+              // Para evitar loop, só na primeira carga
+              console.log(`[Firestore] Chave ${d.key} já existe localmente, mantendo local`);
+            }
+          }
+        });
+      } catch (e) {
+        console.log(`[Firestore] Coleção ${col} ainda não existe ou erro`, e.message);
+      }
+    }
+    console.log(`[Firestore] ${loadedCount} chaves restauradas do Firestore`);
+    if (loadedCount > 0) {
+      // Recarrega para React pegar os dados
+      window.dispatchEvent(new Event('storage'));
+      // Força reload suave do estado se precisar
+      // location.reload(); // opcional - descomente se quiser recarregar automático
+    }
+  }
+
+  // Intercepta localStorage.setItem para salvar automaticamente no Firestore
+  const originalSetItem = localStorage.setItem.bind(localStorage);
+  localStorage.setItem = function(key, value) {
+    originalSetItem(key, value);
+    if (key.startsWith("checklist-") || key.startsWith("finalizacoes-") || key.startsWith("ocorrencias-")) {
+      saveToFirestore(key, value);
+    }
+  };
+
+  // Carrega na inicialização
+  await loadFromFirestore();
+
+  // Listener em tempo real para todas as coleções (sync entre abas/dispositivos)
+  function setupRealtimeSync() {
+    const collections = ["ponte_rolante", "finalizacoes_injetoras", "injetoras", "checklist_geral"];
+    collections.forEach(col => {
+      try {
+        onSnapshot(collection(db, col), (snapshot) => {
+          snapshot.docChanges().forEach((change) => {
+            if (change.type === "added" || change.type === "modified") {
+              const d = change.doc.data();
+              if (d && d.key && d.data) {
+                const localVal = localStorage.getItem(d.key);
+                if (localVal !== d.data) {
+                  console.log(`[Firestore Realtime] Atualizando ${d.key} de ${col}`);
+                  // Evita loop infinito: salva direto sem trigger do wrapper
+                  Storage.prototype.setItem.call(localStorage, d.key, d.data);
+                  // Dispara evento para React detectar se necessário
+                  window.dispatchEvent(new StorageEvent('storage', { key: d.key, newValue: d.data }));
+                }
+              }
+            }
+          });
+        });
+        console.log(`[Firestore] Listener ativo para ${col}`);
+      } catch(e) {
+        console.error(`[Firestore] Erro listener ${col}`, e);
+      }
+    });
+  }
+
+  setupRealtimeSync();
+
+  // Expõe global para debug
+  window._firebase = { app, db, saveToFirestore, loadFromFirestore };
+  window._toast = (msg) => {
+    console.log("[APP]", msg);
+  };
+
+  // UI de status Firebase
+  const statusDiv = document.createElement('div');
+  statusDiv.id = 'firebase-status';
+  statusDiv.style.cssText = 'position:fixed;bottom:12px;right:12px;z-index:9999;background:#16a34a;color:white;padding:8px 12px;border-radius:20px;font-size:11px;font-family:monospace;display:flex;align-items:center;gap:6px;box-shadow:0 4px 12px rgba(0,0,0,0.3)';
+  statusDiv.innerHTML = '<span style="width:8px;height:8px;background:white;border-radius:50%;display:inline-block;animation:pulse 1.5s infinite"></span> Firebase Conectado • Firestore ativo';
+  document.body.appendChild(statusDiv);
+  setTimeout(() => statusDiv.style.opacity = '0.6', 3000);
+  statusDiv.addEventListener('mouseenter', () => statusDiv.style.opacity = '1');
+  statusDiv.addEventListener('mouseleave', () => statusDiv.style.opacity = '0.6');
+
+  console.log("[Firebase] Sync completo ativo!");
+</script>
+
+<style>
+@keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
+#firebase-status:hover { opacity: 1 !important; }
+</style>
+</body>
 </body>
 </html>
