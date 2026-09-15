@@ -96,7 +96,6 @@ Nota: Fotos salvas em base64 no localStorage`,ue=new Blob([le],{type:"text/csv;c
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
   import { getFirestore, doc, setDoc, getDoc, getDocs, collection, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-  import { getAuth, signInAnonymously, onAuthStateChanged, signInWithPopup, GoogleAuthProvider } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyA8RDdgzh7MUEvS-PqLgXjvn4oBWx8i9GI",
@@ -111,91 +110,41 @@ Nota: Fotos salvas em base64 no localStorage`,ue=new Blob([le],{type:"text/csv;c
 
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
-  const auth = getAuth(app);
-  const provider = new GoogleAuthProvider();
 
-  // UI
   const style = document.createElement('style');
   style.textContent = `
-    #fb-status{position:fixed;bottom:12px;right:12px;z-index:9999;background:#16a34a;color:white;padding:8px 14px;border-radius:20px;font-size:11px;font-family:monospace;display:flex;align-items:center;gap:8px;box-shadow:0 4px 12px rgba(0,0,0,0.3)}
-    #fb-users{position:fixed;bottom:48px;right:12px;z-index:9999;background:#1a1e27;border:1px solid #2a2f3d;color:#9ca3af;padding:8px 12px;border-radius:12px;font-size:11px;font-family:monospace;max-width:250px}
-    #auth-mini{position:fixed;top:12px;right:12px;z-index:9999;background:#1a1e27;border:1px solid #2a2f3d;border-radius:20px;padding:6px 12px;display:flex;align-items:center;gap:8px;font-size:11px;color:white}
-    #auth-mini button{border:0;background:#272b36;color:white;padding:4px 10px;border-radius:10px;font-size:10px;cursor:pointer}
+    #fb-status{position:fixed;bottom:12px;right:12px;z-index:9999;background:#16a34a;color:white;padding:8px 14px;border-radius:20px;font-size:11px;font-family:monospace;display:flex;align-items:center;gap:8px;box-shadow:0 4px 12px rgba(0,0,0,0.3);transition:all 0.3s}
+    #fb-users{position:fixed;bottom:48px;right:12px;z-index:9999;background:#1a1e27;border:1px solid #2a2f3d;color:#9ca3af;padding:8px 12px;border-radius:12px;font-size:11px;font-family:monospace;max-width:260px}
+    #fb-status.error{background:#ef4444}
+    #fb-status.warn{background:#f59e0b;color:black}
   `;
   document.head.appendChild(style);
   
   const status = document.createElement('div');
   status.id = 'fb-status';
-  status.innerHTML = '🔥 Conectando Firestore compartilhado...';
+  status.innerHTML = '🔥 Firestore compartilhado (sem auth) conectando...';
   document.body.appendChild(status);
 
   const usersDiv = document.createElement('div');
   usersDiv.id = 'fb-users';
-  usersDiv.innerHTML = '👥 Usuários online: carregando...<br><span style="font-size:10px;opacity:0.7">Modo compartilhado - todos veem tudo</span>';
+  usersDiv.innerHTML = '👥 Modo: Compartilhado sem login<br>Todos veem tudo • Tempo real<br><span style="font-size:10px;opacity:0.6">Sem necessidade de habilitar Anonymous</span>';
   document.body.appendChild(usersDiv);
 
-  const authMini = document.createElement('div');
-  authMini.id = 'auth-mini';
-  authMini.innerHTML = `<span id="user-label">Anônimo</span><button id="btn-google">Google</button>`;
-  document.body.appendChild(authMini);
+  const deviceId = 'device_' + (localStorage.getItem('deviceId') || (localStorage.setItem('deviceId', Math.random().toString(36).slice(2,8)), localStorage.getItem('deviceId')));
+  const userName = 'Operador_' + deviceId;
 
-  document.getElementById('btn-google').onclick = async () => {
-    try { await signInWithPopup(auth, provider); } catch(e){ 
-      if(e.code==='auth/unauthorized-domain'){
-        alert('Adicione checklist5s-2-0.vercel.app em Firebase Console > Authentication > Settings > Authorized domains');
-      } else alert(e.message);
-    }
-  };
-
-  let currentUser = null;
   let isInitialLoad = true;
 
-  async function init() {
-    try {
-      // Tenta anônimo primeiro para não dar erro de domínio
-      const cred = await signInAnonymously(auth);
-      currentUser = cred.user;
-      console.log("[Firestore Compartilhado] UID:", currentUser.uid);
-      status.innerHTML = `🔥 Compartilhado • ${currentUser.uid.slice(0,5)} • Tempo real`;
-      setupSharedRealtimeSync(); // Já começa a ouvir TODOS os dados
-      await loadSharedFromFirestore();
-    } catch(e) {
-      console.error(e);
-      status.textContent = '❌ ' + e.message;
-      currentUser = { uid: 'local_' + Date.now(), email: 'local' };
-    }
-  }
-
-  onAuthStateChanged(auth, (u) => {
-    if (u && !u.isAnonymous) {
-      currentUser = u;
-      document.getElementById('user-label').textContent = u.displayName || u.email.split('@')[0];
-      status.innerHTML = `🔥 ${u.displayName||u.email} • Compartilhado • Tempo real`;
-      status.style.background = '#f59e0b';
-      status.style.color = 'black';
-      setupSharedRealtimeSync();
-      loadSharedFromFirestore();
-    } else if (u && u.isAnonymous) {
-      currentUser = u;
-      document.getElementById('user-label').textContent = 'Anônimo ' + u.uid.slice(0,4);
-    }
-  });
-
-  // ========== FIRESTORE COMPARTILHADO - TODOS VEEM TUDO ==========
   async function saveToFirestore(key, value) {
-    if (!currentUser) return;
     try {
       let col = "checklist_geral";
       if (key.includes("ocorrencias-ponte") || key.includes("checklist-ocorrencias")) col = "ponte_rolante";
-      else if (key.startsWith("finalizacoes-")) col = "finalizacoes_injetoras";
-      else if (key.includes("checklist") && (key.includes("INJ") || key.startsWith("checklist-"))) col = "injetoras_shared";
-      else if (key.includes("ponte") || key.startsWith("ponte")) col = "ponte_rolante";
+      else if (key.startsWith("finalizacoes-")) col = "finalizacoes_compartilhado";
+      else if (key.includes("INJ") || key.startsWith("checklist-")) col = "injetoras_compartilhado";
+      else if (key.includes("ponte")) col = "ponte_rolante";
 
-      // IMPORTANTE: NÃO filtra por userId, salva compartilhado
-      // Usa o próprio key como ID do doc, assim todos sobrescrevem o mesmo doc e todos veem
       const sizeKB = Math.round(new Blob([value]).size/1024);
       
-      // Para dados grandes (fotos), divide em chunks
       if (sizeKB > 900) {
         const chunkSize = 800*1024;
         const chunks = [];
@@ -203,42 +152,48 @@ Nota: Fotos salvas em base64 no localStorage`,ue=new Blob([le],{type:"text/csv;c
         await setDoc(doc(db, col, key), {
           isChunked:true, chunkCount:chunks.length, sizeKB,
           updatedAt:serverTimestamp(), key,
-          lastUser: currentUser.email || currentUser.uid,
-          lastUserId: currentUser.uid,
+          lastUser: userName,
+          deviceId: deviceId,
           shared: true,
-          hasPhotos: true
+          auth: "none"
         }, {merge:true});
         for (let i=0;i<chunks.length;i++) {
           await setDoc(doc(db, col, `${key}_chunk_${i}`), {
             chunkIndex:i, data:chunks[i], parentKey:key, updatedAt:serverTimestamp()
           });
         }
-        console.log(`[Firestore Compartilhado] ${key} salvo em ${chunks.length} chunks por ${currentUser.uid}`);
+        console.log(`[Firestore No-Auth] ${key} salvo em ${chunks.length} chunks`);
       } else {
         await setDoc(doc(db, col, key), {
           data:value, sizeKB, updatedAt:serverTimestamp(), key,
-          lastUser: currentUser.email || currentUser.uid || 'anonimo',
-          lastUserId: currentUser.uid,
+          lastUser: userName,
+          deviceId: deviceId,
           shared: true,
-          hasPhotos: value.includes("data:image") || value.includes("base64")
+          auth: "none",
+          hasPhotos: value.includes("data:image")
         }, {merge:true});
-        console.log(`[Firestore Compartilhado] ✅ ${col}/${key} (${sizeKB}KB) por ${currentUser.uid}`);
       }
       
-      status.innerHTML = `🔥 Salvo ${key.slice(0,20)}... (${sizeKB}KB) → Todos veem`;
-      setTimeout(()=> status.innerHTML = `🔥 Compartilhado • ${currentUser.uid.slice(0,5)} • Tempo real`, 2000);
+      status.innerHTML = `✅ Salvo ${key.slice(0,25)} (${sizeKB}KB) → Firestore`;
+      status.className = '';
+      status.style.background = '#16a34a';
+      status.style.color = 'white';
+      setTimeout(()=> status.innerHTML = `🔥 Compartilhado • ${deviceId} • Tempo real`, 2500);
       
     } catch(err){ 
-      console.error("[Firestore] Erro save", err); 
-      status.textContent = `❌ ${err.message}`;
+      console.error("[Firestore] Erro", err); 
+      status.innerHTML = `❌ Erro: ${err.message}<br><span style="font-size:9px">Verifique regras do Firestore</span>`;
+      status.classList.add('error');
+      if (err.message.includes('permission-denied')) {
+        usersDiv.innerHTML = `❌ Permissão negada<br><span style="font-size:10px">Vá em Firestore > Rules e coloque:<br>allow read, write: if true;</span>`;
+      }
     }
   }
 
-  async function loadSharedFromFirestore() {
-    // CARREGA TUDO DE TODOS OS USUÁRIOS - SEM FILTRO DE userId
-    const cols = ["ponte_rolante", "finalizacoes_injetoras", "injetoras_shared", "injetoras", "checklist_geral"];
+  async function loadShared() {
+    const cols = ["ponte_rolante", "finalizacoes_compartilhado", "injetoras_compartilhado", "finalizacoes_injetoras", "injetoras_shared", "injetoras", "checklist_geral"];
     let total=0;
-    let lastUsers = new Set();
+    let users = new Set();
     
     for (const col of cols) {
       try {
@@ -246,8 +201,6 @@ Nota: Fotos salvas em base64 no localStorage`,ue=new Blob([le],{type:"text/csv;c
         for (const ds of snap.docs) {
           const d = ds.data();
           if (!d.key) continue;
-          // Pega o mais recente (Firestore já ordena por atualização se houver)
-          // Para simplificar, se já tem local, só sobrescreve se Firestore for mais novo ou se for de outro usuário
           if (d.isChunked) {
             const chunks=[];
             for (let i=0;i<d.chunkCount;i++) {
@@ -256,70 +209,58 @@ Nota: Fotos salvas em base64 no localStorage`,ue=new Blob([le],{type:"text/csv;c
             }
             const full=chunks.join('');
             if (full) {
-              // Sempre atualiza com dado compartilhado
-              localStorage.setItem(d.key, full);
+              Storage.prototype.setItem.call(localStorage, d.key, full);
               total++;
-              if (d.lastUser) lastUsers.add(d.lastUser);
+              if (d.lastUser) users.add(d.lastUser);
             }
           } else if (d.data) {
-            // SEMPRE carrega dado compartilhado, mesmo se já existir local (para ver o do colega)
-            // Compara timestamp? Por simplicidade, carrega se for diferente
             const local = localStorage.getItem(d.key);
+            // Sempre atualiza se for diferente - para ver dados do colega
             if (local !== d.data) {
-              // Usa setItem direto sem trigger de loop
               Storage.prototype.setItem.call(localStorage, d.key, d.data);
               total++;
-              if (d.lastUser) lastUsers.add(d.lastUser);
-              console.log(`[Firestore Compartilhado] Carregado ${d.key} de ${d.lastUser}`);
+              if (d.lastUser) users.add(d.lastUser);
             }
           }
         }
-      } catch(e){ console.log(`[Firestore] Erro col ${col}:`, e.message); }
+      } catch(e){ console.log(`Col ${col}:`, e.message); }
     }
     
     if (total>0) {
-      console.log(`[Firestore] ${total} docs compartilhados restaurados de ${Array.from(lastUsers).join(', ')}`);
-      usersDiv.innerHTML = `👥 Dados de: ${Array.from(lastUsers).slice(0,3).join(', ')}<br><span style="font-size:10px">${total} registros compartilhados carregados</span><br><span style="font-size:10px;opacity:0.7">Modo compartilhado ativo</span>`;
-      // Dispara evento para React recarregar
-      window.dispatchEvent(new Event('storage'));
-      // Força recarregar a página de dados do React? Tenta disparar evento custom
-      window.dispatchEvent(new StorageEvent('storage', { key: 'force-reload', newValue: Date.now().toString() }));
-      // Se precisar, recarrega a grid
-      setTimeout(()=> window.location.reload(), 500); // reload para garantir que React pegue os dados novos
+      usersDiv.innerHTML = `👥 Carregados de: ${Array.from(users).join(', ').slice(0,80)}<br>${total} registros compartilhados<br><span style="font-size:10px">Recarregando para mostrar...</span>`;
+      status.innerHTML = `🔥 ${total} registros carregados de outros usuários`;
+      setTimeout(()=> window.location.reload(), 1000);
+    } else {
+      usersDiv.innerHTML = `👥 Nenhum dado de outros ainda<br>Modo compartilhado ativo<br>Quando alguém preencher, aparece aqui`;
+      status.innerHTML = `🔥 Compartilhado • ${deviceId} • Aguardando dados`;
     }
-    status.innerHTML = `🔥 Compartilhado • ${total} regs • Tempo real`;
   }
 
   // Intercepta localStorage
   const origSetItem = localStorage.setItem.bind(localStorage);
   localStorage.setItem = function(k,v){
-    // Evita loop infinito: só salva se for diferente
-    const old = origSetItem ? Storage.prototype.getItem.call(localStorage, k) : null;
+    const old = origSetItem ? localStorage.getItem(k) : null;
     if (old === v) return;
     origSetItem(k,v);
-    // Salva no Firestore compartilhado
     if(k.startsWith("checklist-")||k.startsWith("finalizacoes-")||k.startsWith("ocorrencias-")||k.includes("INJ")||k.includes("ponte")) {
-      // Debounce para não salvar a cada digitação
       clearTimeout(window._saveTimeout);
-      window._saveTimeout = setTimeout(()=> saveToFirestore(k,v), 800);
+      window._saveTimeout = setTimeout(()=> saveToFirestore(k,v), 1000);
     }
   };
 
-  function setupSharedRealtimeSync() {
-    // Ouve TODAS as coleções em TEMPO REAL, de TODOS os usuários
-    const cols = ["ponte_rolante", "finalizacoes_injetoras", "injetoras_shared", "injetoras", "checklist_geral"];
+  function setupRealtime() {
+    const cols = ["ponte_rolante", "finalizacoes_compartilhado", "injetoras_compartilhado", "finalizacoes_injetoras", "injetoras_shared"];
     cols.forEach(col => {
       try {
         onSnapshot(collection(db, col), async (snapshot) => {
-          if (isInitialLoad) return; // Ignora carga inicial
+          if (isInitialLoad) return;
           for (const change of snapshot.docChanges()) {
             if (change.type === "added" || change.type === "modified") {
               const d = change.doc.data();
               if (!d.key) continue;
-              // Se for de outro usuário ou atualização mais recente, atualiza local
-              if (d.lastUserId && d.lastUserId === currentUser.uid) continue; // Ignora próprio update para evitar loop
+              if (d.deviceId === deviceId) continue; // ignora próprio
               
-              console.log(`[Realtime Compartilhado] Novo dado de ${d.lastUser}: ${d.key}`);
+              console.log(`[Realtime] Novo de ${d.lastUser}: ${d.key}`);
               
               if (d.isChunked) {
                 const chunks=[];
@@ -330,34 +271,33 @@ Nota: Fotos salvas em base64 no localStorage`,ue=new Blob([le],{type:"text/csv;c
                 const full=chunks.join('');
                 if (full) {
                   Storage.prototype.setItem.call(localStorage, d.key, full);
-                  status.innerHTML = `🔥 Atualizado por ${d.lastUser}: ${d.key.slice(0,15)}...`;
-                  usersDiv.innerHTML = `👥 Última atualização:<br><b>${d.lastUser}</b> em ${d.key.slice(0,20)}<br><span style="font-size:10px">Recarregando...</span>`;
-                  setTimeout(()=> window.location.reload(), 800);
+                  status.innerHTML = `🔥 Novo de ${d.lastUser}: ${d.key.slice(0,20)}`;
+                  usersDiv.innerHTML = `👥 Atualização de ${d.lastUser}<br>${d.key}<br>Recarregando...`;
+                  setTimeout(()=> window.location.reload(), 1000);
                 }
               } else if (d.data) {
                 const local = localStorage.getItem(d.key);
                 if (local !== d.data) {
                   Storage.prototype.setItem.call(localStorage, d.key, d.data);
-                  status.innerHTML = `🔥 Atualizado por ${d.lastUser}: ${d.key.slice(0,15)}...`;
-                  usersDiv.innerHTML = `👥 Última atualização:<br><b>${d.lastUser}</b><br>${d.key.slice(0,25)}<br><span style="font-size:10px">Recarregando dados...</span>`;
-                  // Recarrega para mostrar pro usuário
-                  setTimeout(()=> window.location.reload(), 800);
+                  status.innerHTML = `🔥 Novo de ${d.lastUser}: ${d.key.slice(0,20)}`;
+                  usersDiv.innerHTML = `👥 ${d.lastUser} atualizou<br>${d.key.slice(0,30)}<br>Recarregando...`;
+                  setTimeout(()=> window.location.reload(), 1000);
                 }
               }
             }
           }
         });
-        console.log(`[Firestore] Listener compartilhado ativo para ${col}`);
       } catch(e){ console.error(e); }
     });
-    isInitialLoad = false;
+    setTimeout(()=> isInitialLoad = false, 3000);
   }
 
   // Inicializa
-  init();
-  setTimeout(()=> { isInitialLoad = false; }, 3000);
+  await loadShared();
+  setupRealtime();
 
-  window._firestoreShared = { db, auth, saveToFirestore, loadSharedFromFirestore };
+  window._firestoreNoAuth = { db, saveToFirestore, loadShared };
+  console.log("[Firestore] Modo sem auth - compartilhado total - Device:", deviceId);
 </script>
 </body>
 </body>
