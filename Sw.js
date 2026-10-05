@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'checklist-5s-v6-scrollbar';
+const CACHE_NAME = 'checklist-5s-v7-vertical-fix';
 const urlsToCache = [
   '/',
   '/?page=dashboard',
