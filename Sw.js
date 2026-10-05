@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'checklist-5s-v5-freeze-final';
+const CACHE_NAME = 'checklist-5s-v6-scrollbar';
 const urlsToCache = [
   '/',
   '/?page=dashboard',
