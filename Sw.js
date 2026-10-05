@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'checklist-5s-v7-vertical-fix';
+const CACHE_NAME = 'checklist-5s-v8-vertical-unlock';
 const urlsToCache = [
   '/',
   '/?page=dashboard',
